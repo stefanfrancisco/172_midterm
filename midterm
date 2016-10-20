@@ -1,0 +1,129 @@
+#!/usr/bin/env node
+var csv = require("fast-csv");
+var fs = require('fs');
+var request = require('request');
+var repl = require('repl');
+var moment = require('moment')
+moment().format();
+var market = {
+rates: [],
+orders: []
+};
+
+
+var data = request('https://api.coinbase.com/v1/currencies/exchange_rates', function (error, response, body) {
+    if (!error && response.statusCode == 200) {
+	var str = body;
+	var i = 0;
+	while (i < str.length)
+	{		
+    		var j = str.indexOf('"btc_to', i);
+		var test = str.indexOf(',', i);
+    		if (j == -1) j = str.length;
+    		(str.substr(i-1, test - i + 1));
+		market.rates += str.substr(i-1, test - i + 1).toUpperCase() + '\n';
+   		 i = j+1;		
+	}
+	var k = 0;
+	while (k < str.length)
+	{
+    		var l = str.indexOf('_to_btc"', k);
+		var test2 = str.indexOf(',', k);
+    		if (l == -1) l = str.length;
+		market.rates += str.substr(k-5, test2 - k + 5).toUpperCase() + '\n';
+   		 k = l+1;
+	}
+    }
+});
+
+var replServer = repl.start({
+prompt: 'coinbase> ',
+eval: myEval
+});
+
+function myEval(cmd, context, filename, callback){
+	/**
+	 * Step 1: Get the command to determine what user would like to do. Remove \n
+	 */
+	var data = cmd.slice(0, cmd.length - 1);						
+	var j = data.length;		
+	var request;
+
+	/**
+	 * Step 2: Determine what to do if user inputs "BUY"
+	 */
+	if(data.substr(0,4) == 'BUY '){
+		//Eliminate any impossible values
+		if(parseFloat(data.substr(4, j-1)) <= 0 || isNaN(parseFloat(data.substr(4, j - 1)))) {
+			callback(null, 'Amount is invalid');
+		} else {
+		request = data.substr(4, j-1);
+		//Determine if a currency does not exist. If not, find the total amount.	
+		if(!isNaN(parseInt(data.substr(data.length - 1)))){ 				
+			callback(null, 'ORDER FOR ' + request + ' BTC queued')
+		} else {
+			var tempIndex = j;											//tempIndex WILL DETERMINE CURRENCY 
+			while(isNaN(parseInt(data.substr(tempIndex - 1)))){			//KEEP GOING BACK UNTIL YOU FIND A NUMBER
+				tempIndex--;
+			}
+			var search = data.substr(tempIndex + 1, j - 1);				//CURRENCY TO BE SEARCHED ON MARKET.RATES
+			var index = market.rates.indexOf(search+'_TO_BTC'); 		//usd_to_btc":" == 13
+			if(index == -1){
+				callback(null, "Currency does not exist.");
+			} else {
+				var tempIndex1 = index + 13;								//EXCHANGE RATE VALUE START
+				var exchangeRate = market.rates.slice(tempIndex1, market.rates.indexOf('"', tempIndex1));	//EXCHANGE RATE TOTAL
+				var total = parseFloat(request) * parseFloat(exchangeRate);
+	            var myDate = new Date(new Date().getTime()); 
+	            market.orders += myDate + ' BUY ' + request + ': UNFILLED' + '\n';                                                                                                             
+	            callback(null, 'ORDER TO BUY ' + request + ' QUEUED AT ' +  exchangeRate + ' BTC/' + search + '(' + total + ')' + '\n');			
+			}
+		}
+		}
+	}
+	/**
+	 * Step 3: Determine what to do if user inputs "SELL". Almost same as buy.
+	 */
+	else if(data.substr(0,5) == 'SELL '){
+		//Eliminate any impossible values
+		if(parseFloat(data.substr(4, j-1)) <= 0 || isNaN(parseFloat(data.substr(4, j - 1)))) {
+			callback(null, 'Amount is invalid');
+		} else {
+		request = data.substr(5, j-1);
+		//Determine if a currency does not exist. If not, find the total amount.	
+			if(!isNaN(parseInt(data.substr(data.length - 1)))){ 				//IF THE END IS A NUMBER
+				callback(null, 'ORDER TO SELL ' + request + ' BTC queued')		//ORDER FOR ____ BTC QUEUED
+			} else {
+				var tempIndex = j;												//tempIndex WILL DETERMINE CURRENCY 
+				while(isNaN(parseInt(data.substr(tempIndex - 1)))){				//KEEP GOING BACK UNTIL YOU FIND A NUMBER
+					tempIndex--;
+				}
+				var search = data.substr(tempIndex + 1, j - 1);					//CURRENCY TO BE SEARCHED ON MARKET.RATES
+				var index = market.rates.indexOf('BTC_TO_'+search); 			//usd_to_btc":" == 13
+
+				var tempIndex1 = index + 13;									//EXCHANGE RATE VALUE START
+				var exchangeRate = market.rates.slice(tempIndex1, market.rates.indexOf('"', tempIndex1));	//EXCHANGE RATE TOTAL
+				var total = parseFloat(request) * parseFloat(exchangeRate);
+	            var myDate = new Date(new Date().getTime()); 
+	            market.orders += myDate + ' SELL ' + request + ': UNFILLED' + '\n';                                                                                                             
+	            callback(null, 'ORDER TO SELL ' + request + ' QUEUED AT ' +  exchangeRate + ' BTC/' + search + '(' + total + ')' + '\n');
+			}
+		}
+	/**
+	 * Step 4: Use CSV to determine how to display orders.
+	 */
+	} else if(data == 'ORDERS') {
+		var CSV_STRING = '==========================ORDERS=======================\n' +  market.orders;
+		csv
+ 		.fromString(CSV_STRING, {headers: false})
+ 		.on("data", function(data){
+ 			console.log(data);
+		})
+ 		.on("end", function(){
+			callback(null)
+ 		});
+	} else {
+		callback(null, 'Not a command.');
+	}
+}
+
