@@ -67,16 +67,16 @@ function myEval(cmd, context, filename, callback){
 				tempIndex--;
 			}
 			var search = data.substr(tempIndex + 1, j - 1);				//CURRENCY TO BE SEARCHED ON MARKET.RATES
-			var index = market.rates.indexOf(search+'_TO_BTC'); 		//usd_to_btc":" == 13
+			var index = market.rates.indexOf('BTC_TO_'+search); 		//usd_to_btc":" == 13
 			if(index == -1){
 				callback(null, "Currency does not exist.");
 			} else {
 				var tempIndex1 = index + 13;								//EXCHANGE RATE VALUE START
 				var exchangeRate = market.rates.slice(tempIndex1, market.rates.indexOf('"', tempIndex1));	//EXCHANGE RATE TOTAL
-				var total = parseFloat(request) * parseFloat(exchangeRate);
+				var total = parseFloat(request) / parseFloat(exchangeRate);
 	            var myDate = new Date(new Date().getTime()); 
-	            market.orders += myDate + ' BUY ' + request + ': UNFILLED' + '\n';                                                                                                             
-	            callback(null, 'ORDER TO BUY ' + request + ' QUEUED AT ' +  exchangeRate + ' BTC/' + search + '(' + total + ')' + '\n');			
+	            market.orders += myDate + ' BUY ' + request + ': UNFILLED' + '\n';                                                                                                          
+	            callback(null, 'ORDER TO BUY ' + request + ' QUEUED AT ' +  exchangeRate + ' BTC/' + search + ' (' + total + ')');			
 			}
 		}
 		}
@@ -100,19 +100,23 @@ function myEval(cmd, context, filename, callback){
 				}
 				var search = data.substr(tempIndex + 1, j - 1);					//CURRENCY TO BE SEARCHED ON MARKET.RATES
 				var index = market.rates.indexOf('BTC_TO_'+search); 			//usd_to_btc":" == 13
-
-				var tempIndex1 = index + 13;									//EXCHANGE RATE VALUE START
-				var exchangeRate = market.rates.slice(tempIndex1, market.rates.indexOf('"', tempIndex1));	//EXCHANGE RATE TOTAL
-				var total = parseFloat(request) * parseFloat(exchangeRate);
-	            var myDate = new Date(new Date().getTime()); 
-	            market.orders += myDate + ' SELL ' + request + ': UNFILLED' + '\n';                                                                                                             
-	            callback(null, 'ORDER TO SELL ' + request + ' QUEUED AT ' +  exchangeRate + ' BTC/' + search + '(' + total + ')' + '\n');
+				if(index == -1){	
+					callback(null, "Currency does not exist.");
+				} else {
+					var tempIndex1 = index + 13;									//EXCHANGE RATE VALUE START
+					var exchangeRate = market.rates.slice(tempIndex1, market.rates.indexOf('"', tempIndex1));	//EXCHANGE RATE TOTAL
+					var total = parseFloat(request) / parseFloat(exchangeRate);
+		            var myDate = new Date(new Date().getTime()); 
+		            market.orders += myDate + ' SELL ' + request + ': UNFILLED' + '\n';                                                                                                             
+		            callback(null, 'ORDER TO SELL ' + request + ' QUEUED AT ' +  exchangeRate + ' BTC/' + search + ' (' + total + ')');
+				}
 			}
 		}
 	/**
 	 * Step 4: Use CSV to determine how to display orders.
 	 */
 	} else if(data == 'ORDERS') {
+
 		var CSV_STRING = '==========================ORDERS=======================\n' +  market.orders;
 		csv
  		.fromString(CSV_STRING, {headers: false})
@@ -122,8 +126,10 @@ function myEval(cmd, context, filename, callback){
  		.on("end", function(){
 			callback(null)
  		});
+		fs.writeFile("orders.csv", CSV_STRING, (err) => {
+		});
+
 	} else {
 		callback(null, 'Not a command.');
 	}
 }
-
